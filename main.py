@@ -4,7 +4,7 @@
 사용 예:
     python main.py commit
     python main.py pr
-    python main.py commit --model claude-opus-5-5 --max-tokens 1024 --safe-mode
+    python main.py commit --model claude-sonnet-4 --max-tokens 1024 --safe-mode
 """
 
 import argparse
@@ -22,9 +22,12 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # 설정값
 # ---------------------------------------------------------------------------
-DEFAULT_MODEL = "claude-opus-5-5"
-API_KEY_ENV = "AI_API_KEY"          # 과제 지정 환경변수
-SAFE_MAX_FILES = 10                  # safe-mode: 최대 파일 수
+DEFAULT_MODEL = "claude-sonnet-4"    # Codyssey 게이트웨이 모델 테이블의 ID
+API_KEY_ENV = "AI_API_KEY"           # Codyssey 가상 키(sk-cody-...) 환경변수
+BASE_URL_ENV = "AI_BASE_URL"         # 게이트웨이 주소 (미설정 시 기본값 사용)
+DEFAULT_BASE_URL = "https://copa.codyssey.kr"
+# 게이트웨이 문서에 명시된 API 버전. SDK 기본값(최신 버전)은 temperature를 거부하므로 고정한다.
+API_VERSION = "2023-06-01"
 SAFE_MAX_LINES = 200                 # safe-mode: 최대 diff 줄 수
 LINE = "-" * 60
 
@@ -94,10 +97,11 @@ MASK_PATTERNS = [
     # API Key 형태 (sk-..., AKIA..., 긴 토큰 등)
     (re.compile(r"\b(sk-[A-Za-z0-9\-_]{10,})"), "[MASKED_API_KEY]"),
     (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "[MASKED_AWS_KEY]"),
+    (re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"), "[MASKED_GITHUB_TOKEN]"),
     (re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b"), "[MASKED_EMAIL]"),
     # key=... / token: ... 형태의 값
-    (re.compile(r"(?i)(api[_-]?key|token|secret|password)\s*[:=]\s*['\"]?[^\s'\"]+"),
-     r"\1=[MASKED]"),
+    (re.compile(r"(?i)\b(api[_-]?key|token|secret|password)(['\"]?\s*[:=]\s*['\"]?)[^\s'\",]+"),
+     r"\1\2[MASKED]"),
 ]
 
 
@@ -107,7 +111,7 @@ def apply_safe_mode(diff, changed_files):
     for pattern, repl in MASK_PATTERNS:
         diff = pattern.sub(repl, diff)
 
-    # (B) 파일 수 / 줄 수 제한
+    # (B) 줄 수 제한
     lines = diff.splitlines()
     truncated = False
     if len(lines) > SAFE_MAX_LINES:
@@ -168,28 +172,27 @@ PR_PROMPT = """당신은 숙련된 소프트웨어 엔지니어입니다.
 # ---------------------------------------------------------------------------
 # AI API 호출
 # ---------------------------------------------------------------------------
-def call_ai(client, model, max_tokens, temperature, prompt):
+def call_ai(model, max_tokens, temperature, prompt):
     """AI API를 1회 호출하고 텍스트를 반환한다."""
+    client = anthropic.Anthropic(
+        api_key=os.environ.get(API_KEY_ENV),
+        base_url=os.environ.get(BASE_URL_ENV) or DEFAULT_BASE_URL,
+        default_headers={"anthropic-version": API_VERSION},
+        max_retries=0,  # 호출 횟수를 1회로 유지 (자동 재시도 끔)
+    )
+
     params = {
         "model": model,
         "max_tokens": max_tokens,
+        "temperature": temperature,
         "messages": [{"role": "user", "content": prompt}],
     }
-    # temperature는 일부 모델에서 지원하지 않으므로 지정된 경우에만 전송
-    if temperature is not None:
-        params["temperature"] = temperature
 
-    try:
-        response = client.messages.create(**params)
-    except anthropic.BadRequestError as e:
-        # temperature 미지원 모델 대응: 제거 후 1회 재시도
-        if temperature is not None and "temperature" in str(e).lower():
-            info("이 모델은 temperature를 지원하지 않아 기본값으로 재요청합니다.")
-            params.pop("temperature", None)
-            response = client.messages.create(**params)
-        else:
-            raise
-    return "".join(b.text for b in response.content if b.type == "text").strip()
+    response = client.messages.create(**params)
+    text = "".join(b.text for b in response.content if b.type == "text").strip()
+    if not text:
+        raise ValueError(f"AI 응답에 텍스트가 없습니다 (stop_reason: {response.stop_reason})")
+    return text
 
 
 # ---------------------------------------------------------------------------
@@ -221,14 +224,15 @@ def validate_pr(title, body):
 # ---------------------------------------------------------------------------
 # 명령 처리
 # ---------------------------------------------------------------------------
-def build_client():
-    api_key = os.environ.get(API_KEY_ENV) or os.environ.get("ANTHROPIC_API_KEY")
+def check_api_key():
+    """API Key 확인"""
+    api_key = os.environ.get(API_KEY_ENV)
     if not api_key:
         error(f"{API_KEY_ENV} 환경변수가 설정되지 않았습니다.")
         print(f'  예) (PowerShell) $env:{API_KEY_ENV}="YOUR_KEY"')
         print(f'  예) (bash)       export {API_KEY_ENV}="YOUR_KEY"')
         sys.exit(1)
-    return anthropic.Anthropic(api_key=api_key)
+    return api_key
 
 
 def prepare_diff(args):
@@ -248,12 +252,12 @@ def prepare_diff(args):
     return diff, files_text
 
 
-def cmd_commit(args, client):
+def cmd_commit(args):
     diff, files_text = prepare_diff(args)
     prompt = COMMIT_PROMPT.format(files=files_text, diff=diff)
 
     info("AI API 요청 중... (호출 횟수: 1회)")
-    message = call_ai(client, args.model, args.max_tokens, args.temperature, prompt)
+    message = call_ai(args.model, args.max_tokens, args.temperature, prompt)
     message = validate_commit(message)
 
     done("커밋 메시지 생성 완료")
@@ -263,13 +267,13 @@ def cmd_commit(args, client):
     print(LINE)
 
 
-def cmd_pr(args, client):
+def cmd_pr(args):
     info(f"현재 브랜치: {current_branch()}")
     diff, files_text = prepare_diff(args)
     prompt = PR_PROMPT.format(branch=current_branch(), files=files_text, diff=diff)
 
     info("AI API 요청 중... (호출 횟수: 1회)")
-    text = call_ai(client, args.model, args.max_tokens, args.temperature, prompt)
+    text = call_ai(args.model, args.max_tokens, args.temperature, prompt)
 
     if "###BODY###" in text:
         title, body = text.split("###BODY###", 1)
@@ -300,8 +304,8 @@ def build_parser():
                         help="commit: 커밋 메시지 생성 / pr: PR 제목·본문 생성")
     parser.add_argument("--model", default=DEFAULT_MODEL,
                         help=f"사용할 AI 모델 (기본값: {DEFAULT_MODEL})")
-    parser.add_argument("--temperature", type=float, default=None,
-                        help="생성 다양성(0~1). 낮을수록 일관적. 지원 모델에서만 적용")
+    parser.add_argument("--temperature", type=float, default=0.3,
+                        help="생성 다양성(0~1). 낮을수록 일관적 (기본값: 0.3)")
     parser.add_argument("--max-tokens", type=int, default=1024,
                         help="응답 최대 토큰 수 (기본값: 1024)")
     parser.add_argument("--safe-mode", action="store_true",
@@ -311,23 +315,44 @@ def build_parser():
 
 def main():
     args = build_parser().parse_args()
-    client = build_client()
+    check_api_key()
     try:
         if args.command == "commit":
-            cmd_commit(args, client)
+            cmd_commit(args)
         else:
-            cmd_pr(args, client)
-    except anthropic.AuthenticationError:
-        error("AI API 인증에 실패했습니다. API Key가 올바른지 확인하세요.")
+            cmd_pr(args)
+    except ValueError as e:
+        error(f"입력 오류: {str(e)}")
         sys.exit(1)
-    except anthropic.APIConnectionError:
-        error("네트워크 오류로 AI API에 연결하지 못했습니다. 인터넷 연결을 확인하세요.")
+    except anthropic.AuthenticationError as e:
+        error(f"AI API 인증 오류: {e.message}")
+        error(f"→ {API_KEY_ENV} 값(sk-cody-...)이 올바른지 확인하세요.")
         sys.exit(1)
-    except anthropic.RateLimitError:
-        error("AI API 요청 한도를 초과했습니다. 잠시 후 다시 시도하세요.")
+    except anthropic.PermissionDeniedError as e:
+        error(f"AI API 권한 오류: {e.message}")
+        error(f"→ 이 키로 '{args.model}' 모델을 쓸 권한이 있는지 확인하세요.")
+        sys.exit(1)
+    except anthropic.NotFoundError as e:
+        error(f"AI API 오류(404): {e.message}")
+        error(f"→ '{args.model}' 모델이 없거나 주소가 잘못됐습니다. "
+              "--model 옵션에 게이트웨이 모델 테이블의 ID를 지정하세요.")
+        sys.exit(1)
+    except anthropic.RateLimitError as e:
+        error(f"AI API 오류(429): {e.message}")
+        error("→ API 요청 한도를 초과했습니다. 잠시 후 다시 시도하세요.")
+        sys.exit(1)
+    except anthropic.BadRequestError as e:
+        error(f"AI API 요청 오류(400): {e.message}")
+        error("→ --max-tokens, --temperature 값이 올바른지 확인하세요.")
         sys.exit(1)
     except anthropic.APIStatusError as e:
         error(f"AI API 오류({e.status_code}): {e.message}")
+        if e.status_code >= 500:
+            error("→ 서버 오류입니다. 잠시 후 다시 시도하세요.")
+        sys.exit(1)
+    except anthropic.APIConnectionError:
+        error("AI API 연결 오류")
+        error(f"→ 인터넷 연결과 게이트웨이 주소({os.environ.get(BASE_URL_ENV) or DEFAULT_BASE_URL})를 확인하세요.")
         sys.exit(1)
 
 
