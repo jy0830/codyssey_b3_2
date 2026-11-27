@@ -11,7 +11,7 @@ Git 변경 사항(`git status`, `git diff`)을 수집해 AI API로 전달하고,
 
 - Python 3.10 이상
 - Git이 설치되어 있고, **Git이 초기화된 프로젝트 루트**에서 실행
-- AI API Key (Anthropic API Key)
+- Codyssey에서 발급받은 Claude 호환 API Key (`sk-cody-...`)
 
 ## 2. 설치
 
@@ -22,64 +22,83 @@ Git 변경 사항(`git status`, `git diff`)을 수집해 AI API로 전달하고,
 python -m venv .venv
 ```
 
-### 2-2. 가상환경 활성화
+### 2-2. 의존성 설치
 
-#### Windows PowerShell (권장)
+**Windows PowerShell:**
 ```powershell
-# 방법 1: 직접 pip 실행 (스크립트 보안 정책 우회)
 .venv\Scripts\python.exe -m pip install -r requirements.txt
-
-# 방법 2: 가상환경 활성화 스크립트 사용
-#         (보안 정책 오류 발생 시 "방법 1"을 사용하세요)
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
 ```
 
-**⚠️ Windows 보안 정책 오류가 발생하는 경우:**
-- `Activate.ps1` 스크립트 실행이 차단되는 경우, **방법 1을 사용**하세요.
-- 혹은 `cmd.exe` (명령 프롬프트)에서는 아래 명령을 사용하세요:
-  ```cmd
-  .venv\Scripts\activate.bat
-  pip install -r requirements.txt
-  ```
-
-#### macOS / Linux
+**macOS / Linux:**
 ```bash
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2-3. 의존성 설치
-
+또는 직접 설치:
 ```bash
-# 위 2-2 단계에서 가상환경 활성화 후 실행하면 됩니다.
-# (또는 방법 1을 사용하면 Activate.ps1 없이도 설치됩니다)
 pip install -r requirements.txt
 ```
 
-## 3. 환경변수(API Key) 설정
+## 3. API Key 발급 및 환경변수 설정
+
+### 3-1. API Key 준비
+
+이 도구는 Codyssey 게이트웨이(`https://copa.codyssey.kr`)를 통해 Claude API를 호출합니다.
+Codyssey에서 발급받은 가상 키(`sk-cody-...`)를 준비하세요.
+
+### 3-2. 환경변수 설정
+
+**실행 전에 반드시 환경변수를 설정해야 합니다.**
 
 API Key는 **코드에 하드코딩하지 않고 환경변수로만** 관리합니다.
 
-```bash
-# macOS / Linux (bash)
-export AI_API_KEY="YOUR_KEY"
+| 환경변수 | 설명 | 필수 |
+|----------|------|------|
+| `AI_API_KEY` | 발급받은 가상 키 (`sk-cody-...`) | 필수 |
+| `AI_BASE_URL` | 게이트웨이 주소 | 선택 (기본값 `https://copa.codyssey.kr`) |
 
-# Windows PowerShell
-$env:AI_API_KEY="YOUR_KEY"
+### Windows PowerShell
+```powershell
+$env:AI_API_KEY="YOUR_API_KEY"
 ```
 
-> `ANTHROPIC_API_KEY` 환경변수도 대체 키로 인식합니다.
+### macOS / Linux (bash)
+```bash
+export AI_API_KEY="YOUR_API_KEY"
+```
+
+> 환경변수는 현재 터미널 창에서만 유지됩니다. 새 터미널을 열면 다시 설정하세요.
 
 ## 4. 사용법
 
-프로젝트 루트에서 변경 사항을 만든 뒤 실행합니다.
+프로젝트 루트에서 변경 사항을 만든 뒤, **환경변수 설정 후 실행**합니다.
 
+### 커밋 메시지 생성
+
+**Windows PowerShell:**
+```powershell
+$env:AI_API_KEY="YOUR_API_KEY"
+.venv\Scripts\python.exe main.py commit
+```
+
+**macOS / Linux:**
 ```bash
-# 커밋 메시지 생성
+export AI_API_KEY="YOUR_API_KEY"
 python main.py commit
+```
 
-# PR 제목/본문 초안 생성
+### PR 제목/본문 초안 생성
+
+**Windows PowerShell:**
+```powershell
+$env:AI_API_KEY="YOUR_API_KEY"
+.venv\Scripts\python.exe main.py pr
+```
+
+**macOS / Linux:**
+```bash
+export AI_API_KEY="YOUR_API_KEY"
 python main.py pr
 ```
 
@@ -87,19 +106,26 @@ python main.py pr
 
 | 옵션 | 설명 | 기본값 |
 |------|------|--------|
-| `--model` | 사용할 AI 모델 | `claude-opus-5-5` |
-| `--temperature` | 생성 다양성(0~1). 지원 모델에서만 적용 | 미지정 |
+| `--model` | 사용할 AI 모델 | `claude-sonnet-4` |
+| `--temperature` | 생성 다양성(0~1). 낮을수록 일관적 | `0.3` |
 | `--max-tokens` | 응답 최대 토큰 수 | `1024` |
 | `--safe-mode` | 민감정보 마스킹 + diff 길이 제한 후 전송 | 꺼짐 |
 
+**사용 예시:**
 ```bash
-python main.py commit --model claude-opus-5-5 --max-tokens 800 --safe-mode
-python main.py pr --temperature 0.4
+python main.py commit --model claude-haiku-4 --max-tokens 800 --safe-mode
+python main.py pr --temperature 0.7
 ```
+
+**모델 예시 (Codyssey 게이트웨이 기준):**
+- `claude-sonnet-4` (기본)
+- `claude-haiku-4` (더 빠르고 가벼움)
+
+> 사용할 수 있는 모델은 Codyssey 문서의 모델 테이블을 확인하세요. 없는 모델을 지정하면 404 오류와 함께 안내 메시지가 출력됩니다.
 
 ## 5. 출력 예시
 
-### 커밋 메시지
+### 커밋 메시지 생성 예시
 
 ```
 [INFO] Git status 수집 완료: 3개 파일 변경 감지
@@ -116,10 +142,12 @@ feat: Git 변경 사항 기반 커밋 메시지 자동 생성 기능 추가
 ------------------------------------------------------------
 ```
 
-### PR 초안
+### PR 초안 생성 예시
 
 ```
 [INFO] 현재 브랜치: feature/commit-pr-generator
+[INFO] Git status 수집 완료: 3개 파일 변경 감지
+[INFO] Git diff 수집 완료: 128줄
 [INFO] AI API 요청 중... (호출 횟수: 1회)
 [DONE] PR 초안 생성 완료
 ------------------------------------------------------------
@@ -128,66 +156,75 @@ feat: 커밋/PR 자동 생성 기능 추가
 
 --- PR Body ---
 ## Why
-- 커밋 메시지와 PR 설명 작성에 드는 시간을 줄이기 위해 자동화 도구가 필요했습니다.
+- 팀 협업 시 커밋 메시지와 PR 설명 작성에 시간이 소요되어 자동 생성 도구가 필요했습니다.
+- Git 변경 사항을 기반으로 일관된 형식의 요약 텍스트를 생성해 리뷰 효율을 높이고자 했습니다.
 
 ## What
 - git status/diff 수집 및 AI 입력 컨텍스트 전달 로직 추가
-- commit / pr 명령 구현
+- 커밋 메시지 자동 생성 기능(python main.py commit) 구현
+- PR 제목/본문 자동 생성 기능(python main.py pr) 구현
 
 ## How to Test
-- export AI_API_KEY="YOUR_KEY"
-- python main.py commit / python main.py pr 실행 후 출력 확인
+- 환경변수 설정: export AI_API_KEY="YOUR_KEY"
+- 커밋 메시지 생성: python main.py commit
+- PR 초안 생성: python main.py pr
+- 결과로 출력된 PR 본문이 Why/What/How to Test 구조와 길이 규칙을 만족하는지 확인
 ------------------------------------------------------------
+```
+
+### 환경변수 미설정 오류 예시
+
+```
+[ERROR] AI_API_KEY 환경변수가 설정되지 않았습니다.
+  예) (PowerShell) $env:AI_API_KEY="YOUR_KEY"
+  예) (bash)       export AI_API_KEY="YOUR_KEY"
+```
+
+### 변경 사항이 없는 경우 예시
+
+```
+[INFO] 변경 사항이 없습니다. 생성하지 않고 종료합니다.
 ```
 
 ## 6. 동작 방식
 
-1. `git status`, `git diff`로 변경 사항을 수집합니다.
-2. 변경 사항이 없으면 안내 후 종료합니다.
+1. Git 저장소 확인 후 `git status`, `git diff`로 변경 사항을 수집합니다.
+2. 변경 사항이 없으면 안내 메시지를 출력하고 종료합니다.
 3. (옵션) `--safe-mode`에서 민감정보를 마스킹하고 diff 길이를 제한합니다.
 4. 커밋/PR 양식을 포함한 프롬프트를 구성해 **AI API를 1회 호출**합니다.
 5. 길이·형식 규칙(커밋 제목 ≤72자, PR 제목 ≤80자, PR 섹션 헤더 필수)을 검증·후처리합니다.
-6. 구분선/헤더로 구획을 나눠 터미널에 출력합니다. (사용자가 복사해 적용)
+6. 구분선/헤더로 구획이 나뉘어 터미널에 출력됩니다. (사용자가 복사해 적용)
 
-## 7. 가상환경 활성화 문제 해결
+## 7. 보안 주의사항
 
-### Windows에서 "Activate.ps1을 실행할 수 없다"는 오류
+### 민감정보 보호
 
-PowerShell 보안 정책이 스크립트 실행을 차단할 수 있습니다.
+**문제:** git diff에 API Key, 개인정보, 비밀번호 등 민감정보가 포함될 수 있습니다.
 
 **해결 방법:**
 
-1. **pip를 직접 호출 (권장 - 스크립트 우회)**
-   ```powershell
-   .venv\Scripts\python.exe -m pip install -r requirements.txt
+1. **`--safe-mode` 옵션 사용 (권장)**
+   ```bash
+   python main.py commit --safe-mode
+   python main.py pr --safe-mode
    ```
-   이 방법은 가상환경을 활성화할 필요 없이 직접 패키지를 설치합니다.
+   - API Key 형태(sk-..., AKIA...) 등 패턴 자동 마스킹
+   - diff를 최대 200줄로 제한하여 전송
+   - 민감정보가 포함될 가능성이 있는 저장소에서 필수 권장
 
-2. **cmd.exe (명령 프롬프트) 사용**
-   ```cmd
-   .venv\Scripts\activate.bat
-   pip install -r requirements.txt
-   ```
+2. **민감 파일 사전 제외**
+   - `.gitignore`에 민감 정보 파일 추가
+   - `git add`하기 전에 diff 검토
 
-3. **PowerShell 실행 정책 임시 변경 (고급)**
-   ```powershell
-   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
-   .venv\Scripts\Activate.ps1
-   ```
-   현재 세션에서만 정책이 적용됩니다.
+### 비용 및 요청 횟수 제한
 
-### 가상환경 활성화 확인
-정상적으로 활성화되면 프롬프트가 다음과 같이 변합니다:
-```
-(.venv) PS C:\Users\USER\Desktop\cody_b3_2>
-```
+- `commit`/`pr` 각 명령은 AI API를 **1회만 호출**하여 비용을 제어합니다.
+- 로그에 호출 횟수를 명시하므로 모니터링이 용이합니다.
+- 과도한 사용을 방지하기 위해 1회 호출 시 max_tokens를 1024로 제한합니다.
 
-## 8. 주의사항 (운영 관점)
+## 8. 주의사항
 
-- **민감정보**: `--safe-mode`를 사용하면 API Key/이메일 등 패턴을 마스킹하고,
-  diff를 최대 10개 파일·200줄로 제한해 전송합니다. 민감정보가 포함될 수 있는
-  저장소에서는 `--safe-mode` 사용을 권장합니다.
-- **비용/요청 제한**: 과도한 비용을 막기 위해 `commit`/`pr` 명령은 각각
-  **AI API를 1회만 호출**하며, 로그에 호출 횟수를 출력합니다.
-- 생성된 커밋/PR 문구는 초안입니다. 반드시 검토 후 적용하세요.
-- 이 도구는 초안 **텍스트 출력**까지만 수행하며, `git push`나 원격 PR 생성은 하지 않습니다.
+- 생성된 커밋/PR 문구는 초안입니다. **반드시 검토 후 적용하세요.**
+- 이 도구는 초안 **텍스트 출력**까지만 수행합니다. `git commit`, `git push`, GitHub PR 생성 등은 사용자가 수동으로 수행해야 합니다.
+- API Key는 절대 코드에 하드코딩하지 마세요. 환경변수로만 관리하세요.
+- 발급받은 가상 키는 Codyssey 이용 규정에 맞게 사용하고, 다른 사람과 공유하지 마세요.
