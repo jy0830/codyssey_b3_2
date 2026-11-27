@@ -15,15 +15,45 @@ Git 변경 사항(`git status`, `git diff`)을 수집해 AI API로 전달하고,
 
 ## 2. 설치
 
-```bash
-# (권장) 가상환경
-python -m venv .venv
-# Windows PowerShell
-.venv\Scripts\Activate.ps1
-# macOS / Linux
-source .venv/bin/activate
+### 2-1. 가상환경 생성
 
-# 의존성 설치
+```bash
+# 가상환경 생성
+python -m venv .venv
+```
+
+### 2-2. 가상환경 활성화
+
+#### Windows PowerShell (권장)
+```powershell
+# 방법 1: 직접 pip 실행 (스크립트 보안 정책 우회)
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+
+# 방법 2: 가상환경 활성화 스크립트 사용
+#         (보안 정책 오류 발생 시 "방법 1"을 사용하세요)
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+**⚠️ Windows 보안 정책 오류가 발생하는 경우:**
+- `Activate.ps1` 스크립트 실행이 차단되는 경우, **방법 1을 사용**하세요.
+- 혹은 `cmd.exe` (명령 프롬프트)에서는 아래 명령을 사용하세요:
+  ```cmd
+  .venv\Scripts\activate.bat
+  pip install -r requirements.txt
+  ```
+
+#### macOS / Linux
+```bash
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 2-3. 의존성 설치
+
+```bash
+# 위 2-2 단계에서 가상환경 활성화 후 실행하면 됩니다.
+# (또는 방법 1을 사용하면 Activate.ps1 없이도 설치됩니다)
 pip install -r requirements.txt
 ```
 
@@ -119,7 +149,40 @@ feat: 커밋/PR 자동 생성 기능 추가
 5. 길이·형식 규칙(커밋 제목 ≤72자, PR 제목 ≤80자, PR 섹션 헤더 필수)을 검증·후처리합니다.
 6. 구분선/헤더로 구획을 나눠 터미널에 출력합니다. (사용자가 복사해 적용)
 
-## 7. 주의사항 (운영 관점)
+## 7. 가상환경 활성화 문제 해결
+
+### Windows에서 "Activate.ps1을 실행할 수 없다"는 오류
+
+PowerShell 보안 정책이 스크립트 실행을 차단할 수 있습니다.
+
+**해결 방법:**
+
+1. **pip를 직접 호출 (권장 - 스크립트 우회)**
+   ```powershell
+   .venv\Scripts\python.exe -m pip install -r requirements.txt
+   ```
+   이 방법은 가상환경을 활성화할 필요 없이 직접 패키지를 설치합니다.
+
+2. **cmd.exe (명령 프롬프트) 사용**
+   ```cmd
+   .venv\Scripts\activate.bat
+   pip install -r requirements.txt
+   ```
+
+3. **PowerShell 실행 정책 임시 변경 (고급)**
+   ```powershell
+   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
+   .venv\Scripts\Activate.ps1
+   ```
+   현재 세션에서만 정책이 적용됩니다.
+
+### 가상환경 활성화 확인
+정상적으로 활성화되면 프롬프트가 다음과 같이 변합니다:
+```
+(.venv) PS C:\Users\USER\Desktop\cody_b3_2>
+```
+
+## 8. 주의사항 (운영 관점)
 
 - **민감정보**: `--safe-mode`를 사용하면 API Key/이메일 등 패턴을 마스킹하고,
   diff를 최대 10개 파일·200줄로 제한해 전송합니다. 민감정보가 포함될 수 있는
