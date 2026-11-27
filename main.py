@@ -184,8 +184,9 @@ def call_ai(model, max_tokens, temperature, prompt):
     params = {
         "model": model,
         "max_tokens": max_tokens,
-        "temperature": temperature,
         "messages": [{"role": "user", "content": prompt}],
+        # 최신 SDK는 temperature 인자를 제거했으므로 요청 본문에 직접 넣는다.
+        "extra_body": {"temperature": temperature},
     }
 
     response = client.messages.create(**params)
