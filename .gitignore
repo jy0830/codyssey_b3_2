@@ -7,3 +7,6 @@ venv/
 # 환경변수 / 비밀정보
 .env
 *.key
+.claude/
+.claude/**
+settings.local.json
