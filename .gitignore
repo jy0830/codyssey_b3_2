@@ -1,0 +1,9 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 환경변수 / 비밀정보
+.env
+*.key
