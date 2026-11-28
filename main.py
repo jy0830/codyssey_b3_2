@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Git 변경 사항 기반 커밋 메시지 / PR 초안 자동 생성 CLI 도구.
 
-사용 예:
-    python main.py commit
-    python main.py pr
-    python main.py commit --model claude-sonnet-4 --max-tokens 1024 --safe-mode
+사용 예 (가상환경 Python을 직접 호출):
+    ./.venv/bin/python main.py commit           # macOS / Linux
+    .venv\\Scripts\\python.exe main.py pr          # Windows
+    ./.venv/bin/python main.py commit --model claude-sonnet-4 --max-tokens 1024 --safe-mode
 """
 
 import argparse
@@ -16,7 +16,11 @@ import sys
 try:
     import anthropic
 except ImportError:
-    print("[ERROR] anthropic 패키지가 설치되어 있지 않습니다. 'pip install -r requirements.txt' 를 실행하세요.")
+    print("[ERROR] 현재 실행 중인 Python에 anthropic 패키지가 설치되어 있지 않습니다.")
+    print(f"  실행 중인 Python: {sys.executable}")
+    print("  가상환경 Python으로 설치/실행하세요.")
+    print(r"  예) (Windows)     .venv\Scripts\python.exe -m pip install -r requirements.txt")
+    print("  예) (macOS/Linux) ./.venv/bin/python -m pip install -r requirements.txt")
     sys.exit(1)
 
 # ---------------------------------------------------------------------------
