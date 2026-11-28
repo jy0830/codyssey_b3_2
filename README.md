@@ -15,12 +15,27 @@ Git 변경 사항(`git status`, `git diff`)을 수집해 AI API로 전달하고,
 
 ## 2. 설치
 
+> **핵심:** 가상환경을 만든 뒤에는 `python`/`pip` 대신 **가상환경 안의 Python을 경로로 직접 호출**합니다.
+> 이렇게 하면 `activate` 여부나 OS 기본 Python 설정과 관계없이 항상 같은 환경에서 실행됩니다.
+>
+> | OS | 가상환경 Python 경로 |
+> |----|----------------------|
+> | Windows | `.venv\Scripts\python.exe` |
+> | macOS / Linux | `./.venv/bin/python` |
+
 ### 2-1. 가상환경 생성
 
-```bash
-# 가상환경 생성
+**Windows PowerShell:**
+```powershell
 python -m venv .venv
 ```
+
+**macOS / Linux:**
+```bash
+python3 -m venv .venv
+```
+
+> macOS에는 기본적으로 `python` 명령이 없고 `python3`만 있습니다.
 
 ### 2-2. 의존성 설치
 
@@ -31,14 +46,11 @@ python -m venv .venv
 
 **macOS / Linux:**
 ```bash
-source .venv/bin/activate
-pip install -r requirements.txt
+./.venv/bin/python -m pip install -r requirements.txt
 ```
 
-또는 직접 설치:
-```bash
-pip install -r requirements.txt
-```
+> `pip install ...`을 그대로 실행하면 시스템 Python에 설치를 시도해
+> `externally-managed-environment` 오류가 나거나, 설치는 되어도 실행 시 패키지를 못 찾을 수 있습니다.
 
 ## 3. API Key 발급 및 환경변수 설정
 
@@ -85,7 +97,7 @@ $env:AI_API_KEY="YOUR_API_KEY"
 **macOS / Linux:**
 ```bash
 export AI_API_KEY="YOUR_API_KEY"
-python main.py commit
+./.venv/bin/python main.py commit
 ```
 
 ### PR 제목/본문 초안 생성
@@ -99,7 +111,7 @@ $env:AI_API_KEY="YOUR_API_KEY"
 **macOS / Linux:**
 ```bash
 export AI_API_KEY="YOUR_API_KEY"
-python main.py pr
+./.venv/bin/python main.py pr
 ```
 
 ### CLI 옵션
@@ -112,9 +124,17 @@ python main.py pr
 | `--safe-mode` | 민감정보 마스킹 + diff 길이 제한 후 전송 | 꺼짐 |
 
 **사용 예시:**
+
+Windows PowerShell:
+```powershell
+.venv\Scripts\python.exe main.py commit --model claude-haiku-4 --max-tokens 800 --safe-mode
+.venv\Scripts\python.exe main.py pr --temperature 0.7
+```
+
+macOS / Linux:
 ```bash
-python main.py commit --model claude-haiku-4 --max-tokens 800 --safe-mode
-python main.py pr --temperature 0.7
+./.venv/bin/python main.py commit --model claude-haiku-4 --max-tokens 800 --safe-mode
+./.venv/bin/python main.py pr --temperature 0.7
 ```
 
 **모델 예시 (Codyssey 게이트웨이 기준):**
@@ -205,8 +225,9 @@ feat: 커밋/PR 자동 생성 기능 추가
 
 1. **`--safe-mode` 옵션 사용 (권장)**
    ```bash
-   python main.py commit --safe-mode
-   python main.py pr --safe-mode
+   # Windows: .venv\Scripts\python.exe main.py commit --safe-mode
+   ./.venv/bin/python main.py commit --safe-mode
+   ./.venv/bin/python main.py pr --safe-mode
    ```
    - API Key 형태(sk-..., AKIA...) 등 패턴 자동 마스킹
    - diff를 최대 200줄로 제한하여 전송
@@ -222,7 +243,20 @@ feat: 커밋/PR 자동 생성 기능 추가
 - 로그에 호출 횟수를 명시하므로 모니터링이 용이합니다.
 - 과도한 사용을 방지하기 위해 1회 호출 시 max_tokens를 1024로 제한합니다.
 
-## 8. 주의사항
+## 8. 설치/실행 문제 해결
+
+| 증상 | 원인 | 해결 |
+|------|------|------|
+| `command not found: python` (macOS) | macOS에는 `python3`만 있음 | `python3 -m venv .venv`로 가상환경 생성 |
+| `error: externally-managed-environment` | 가상환경이 아닌 시스템 Python에 `pip install` 시도 | `./.venv/bin/python -m pip install -r requirements.txt` |
+| `anthropic 패키지가 설치되어 있지 않습니다` | 패키지를 설치한 환경과 실행한 Python이 다름 | 설치와 실행 모두 가상환경 Python(`./.venv/bin/python`)으로 수행 |
+| `No such file or directory: ./.venv/bin/python` | 가상환경 미생성 또는 프로젝트 루트가 아닌 곳에서 실행 | 프로젝트 루트로 이동 후 2-1 단계부터 다시 진행 |
+| Windows에서 `activate` 실행 시 스크립트 실행 정책 오류 | PowerShell 실행 정책 제한 | `activate` 없이 `.venv\Scripts\python.exe`로 직접 실행 |
+
+> `source .venv/bin/activate`(macOS) 또는 `.venv\Scripts\Activate.ps1`(Windows)로 가상환경을 활성화했다면
+> 그 터미널에서는 `python main.py ...`처럼 짧게 실행해도 됩니다. 다만 활성화를 잊으면 위 오류가 나므로, 이 문서는 경로 직접 호출 방식을 기준으로 안내합니다.
+
+## 9. 주의사항
 
 - 생성된 커밋/PR 문구는 초안입니다. **반드시 검토 후 적용하세요.**
 - 이 도구는 초안 **텍스트 출력**까지만 수행합니다. `git commit`, `git push`, GitHub PR 생성 등은 사용자가 수동으로 수행해야 합니다.
